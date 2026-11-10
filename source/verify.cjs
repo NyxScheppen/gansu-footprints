@@ -14,7 +14,12 @@ const fs = require('node:fs');
   const react = process.argv.includes('--react');
   const base = process.env.SITE_BASE_URL || (react ? 'http://127.0.0.1:4174/' : null);
   const url = name => base ? new URL(name+'.html',base).href : pathToFileURL(path.resolve(name+'.html')).href;
-  const navigate = async name => { await page.goto(url(name)); await page.locator('main h1').waitFor(); };
+  const navigate = async name => {
+    await page.goto(url(name));
+    await page.locator('main h1').waitFor();
+    // React may mount images after the HTML load event, especially over the network.
+    await page.waitForFunction(()=>Array.from(document.images).every(img=>img.complete&&img.naturalWidth>0),{},{timeout:45000});
+  };
   const files = ['index','explore','fuxi','bronze','apple','maiji','river','quiz'];
   const chapters = ['fuxi','bronze','apple','maiji','river'];
   page.on('pageerror',error=>errors.push(error.message));
@@ -35,7 +40,7 @@ const fs = require('node:fs');
   await navigate('index');
   check(await page.locator('main > section').count()===1,'Home only contains hero');
   check(await page.locator('.hero-slide').count()===5,'Five scenic photographs in homepage carousel');
-  check(await page.locator('.hero-slide img').evaluateAll(els=>els.every(img=>img.complete&&img.naturalWidth>0)),'All carousel photos load offline');
+  check(await page.locator('.hero-slide img').evaluateAll(els=>els.every(img=>img.complete&&img.naturalWidth>0)),'All carousel photos load');
   check(await page.locator('.carousel-toggle').getAttribute('aria-label')==='开始自动轮播','Reduced motion disables automatic rotation');
   for(let i=0;i<5;i++){
     await page.locator('.carousel-dot').nth(i).click();
@@ -164,8 +169,8 @@ const fs = require('node:fs');
   await automatic.close();
   check(errors.length===0,'No browser script errors: '+errors.join('; '));
   check(requests.length===0,'Site loads no third party resources');
-  const checks=['five full length articles','left sticky map and directory','wide document-scrolling article','active table of contents','local scenic backgrounds on five topics and quiz','no old floating window','no horizontal overflow','fixed footer spacing','expanded quiz card and review links','direct refresh','offline','mobile navigation','five image carousel with auto rotation pause resume dots and keyboard','reduced motion disables autoplay'];
+  const checks=['five full length articles','left sticky map and directory','wide document-scrolling article','active table of contents','local scenic backgrounds on five topics and quiz','no old floating window','no horizontal overflow','fixed footer spacing','expanded quiz card and review links','direct refresh',react?'no third party resources':'offline','mobile navigation','five image carousel with auto rotation pause resume dots and keyboard','reduced motion disables autoplay'];
   fs.writeFileSync(react?'source/verification-react.json':'source/verification.json',JSON.stringify({passed:true,pages:files,viewports:[1237,390,320,768],errors,externalRequests:requests,checks},null,2));
-  console.log('PASS: reading layout, sticky map, directory tracking, whole-page scrolling, mobile, links, quiz, offline, and all eight pages.');
+  console.log('PASS: reading layout, sticky map, directory tracking, whole-page scrolling, mobile, links, quiz, photographs, and all eight pages.');
   await browser.close();
 })().catch(error=>{console.error(error);process.exit(1)});
